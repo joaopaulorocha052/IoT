@@ -1,52 +1,25 @@
+#include <Arduino.h>
 #include "DHT.h"
-
-// =================================================================
-// == CÓDIGO PARA O SUBSISTEMA SECUNDÁRIO (Arduino Mega)          ==
-// =================================================================  
-#define DHTPIN 10
-#define DHTTYPE DHT11
+#include "head_arduino.h"
 
 DHT dht(DHTPIN, DHTTYPE);
 
-#define SOUND_SPEED 0.034
-// Pinos para receber o estado do ESP8266
-const int pino_recebe_bit0 = 2;
-const int pino_recebe_bit1 = 3;
+#define DISTANCE_SAMPLE_WINDOW 10
 
-// Pinos para os LEDs
-const int pinLED1 = 8;
-const int pinLED2 = 9;
-
-// Pinos para o sensor de distancia 
-const int trigPin = 5;
-const int echoPin = 18;
-
-// Pinos LDR
-const int LDRPin = A1;
-
-// Períodos para piscar os LEDs (em milissegundos)
-const int periodoLed1_cleaning = 100;
-const int periodoLed2_docking = 50;
-const int periodoLed1_charging = 100;
-const int periodoLed2_charging = 50;
-
-// Variáveis para controle de tempo dos LEDs
 unsigned long ultimoMillisLed1 = 0;
 unsigned long ultimoMillisLed2 = 0;
 int estadoLed1 = LOW;
 int estadoLed2 = LOW;
 
-long duration;
-float distanceCm;
-float distaceAcumulator = 0;
+long duration = 0;
+float distanceAccumulator = 0.0f;
 int distanceIterator = 0;
-float average;
+float average = 0.0f;
+int lastDistanceState = -1;
+int lastLuminosityState = -1;
+int lastHumidityState = -1;
 
-int distanceMargin = 5;
-int distanceThresholdNoObs = 180;
-int distanceThresholdFarAway = 100;
-int distanceThresholdMedium = 50;
-int distanceThresholdClose = 25;
+
 
 void enviarEstado(int estado, int pin0, int pin1) {
   // Converte o número do estado (0-3) para 2 bits
@@ -57,26 +30,31 @@ void enviarEstado(int estado, int pin0, int pin1) {
   digitalWrite(pin1, bit1);
 }
 
-void sendDistance(){
-  int state;
-  if(fabs(average - distanceThresholdNoObs) > distanceMargin){
-    state = 0;
+/* Distância */
+int resolveDistanceState(float measuredDistance) {
+  if (measuredDistance >= distanceThresholdNoObs - distanceMargin) {
+    return 0b00;
   }
-  else if(fabs(average - distanceThresholdFarAway) > distanceMargin){
-    state = 1;
+  if (measuredDistance >= distanceThresholdFarAway - distanceMargin) {
+    return 0b01;
   }
-  else if(fabs(average - distanceThresholdMedium) > distanceMargin){
-    state = 2;
+  if (measuredDistance >= distanceThresholdMedium - distanceMargin) {
+    return 0b10;
   }
-  else if(fabs(average - distanceThresholdClose) > distanceMargin){
-    state = 3;
-  }
-
-  enviarEstado(state, 6, 7); // 11 e 12 livres
-
+  return 0b11;
 }
- 
-float get_distance(){
+
+void sendDistance() {
+  const int state = resolveDistanceState(average);
+  if (state == lastDistanceState) {
+    return;
+  }
+
+  lastDistanceState = state;
+  enviarEstado(state, pino_distancia_bit0, pino_distancia_bit1); // 11 e 12 livres
+}
+
+float getDistance(){
   digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
   digitalWrite(trigPin, HIGH);
@@ -87,6 +65,36 @@ float get_distance(){
   
   return duration * SOUND_SPEED/2;
 }
+
+
+/* Luminosidade */
+int resolveLuminosityState(int ldr_value) {
+  return (ldr_value >= threshold_obstacle) ? 0b1 : 0b0;
+}
+
+void sendLight() {
+  int ldr_value = analogRead(LDRPin);
+  int state = resolveLuminosityState(ldr_value);
+  if(state == lastLuminosityState){
+    return;
+  }
+  digitalWrite(pino_luminosity_bit, state);
+}
+
+/* Humidade */
+int resolveHumidityState(float humidity_value){
+  return (humidity_value >= threshold_humidity) ? 0b1 : 0b0;
+}
+
+void sendHumidity(){
+  float humidity_value = dht.readHumidity();
+  int state = resolveHumidityState(humidity_value);
+  if(state == lastHumidityState){
+    return;
+  }
+  digitalWrite(pino_humidity_bit, state);
+}
+
 
 // Funções de estado (APENAS AÇÕES DOS LEDS)
 void idle() {
@@ -128,6 +136,29 @@ void charging() {
   }
 }
 
+void averageDistance(){
+
+  const float measurement = getDistance();
+
+  if (measurement <= 0) {
+    return;
+  }
+
+  distanceAccumulator += measurement;
+  distanceIterator++;
+
+  if (distanceIterator < DISTANCE_SAMPLE_WINDOW) {
+    return;
+  }
+
+  average = distanceAccumulator / distanceIterator;
+  distanceIterator = 0;
+  distanceAccumulator = 0.0f;
+
+  Serial.println(average);
+  sendDistance(average);
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -136,6 +167,9 @@ void setup() {
   pinMode(pino_recebe_bit0, INPUT);
   pinMode(pino_recebe_bit1, INPUT);
 
+  pinMode(pino_distancia_bit0, OUTPUT);
+  pinMode(pino_distancia_bit1, OUTPUT);
+
   // Configura os pinos dos LEDs como saída
   pinMode(pinLED1, OUTPUT);
   pinMode(pinLED2, OUTPUT);
@@ -143,24 +177,18 @@ void setup() {
   pinMode(echoPin, INPUT);
 
   pinMode(LDRPin, INPUT);
-}
 
-void averageDistance(){
+  pinMode(DHT11Pin, INPUT);
+  pinMode(pino_luminosity_bit, INPUT);;
+  pinMod
+  pinMode(pino_humidity_bit, INPUT);
 
-  if(distanceIterator < 10){
-    distanceIterator++;
-    distaceAcumulator += get_distance();
-  } 
-  else {
-    Serial.println(distaceAcumulator/distanceIterator);
-    average = distaceAcumulator/distanceIterator;
-    distanceIterator = 0;
-    distaceAcumulator = 0;
- 
-  }
   
+  sendDistance(distanceThresholdNoObs);
 }
+
 void loop() {
+  int estado_anterior = estado_recebido;
   averageDistance();
   // PARTE 1: Ler os pinos para descobrir o estado atual
   int bit0 = digitalRead(pino_recebe_bit0);
@@ -168,15 +196,6 @@ void loop() {
 
   // Reconstrói o número do estado a partir dos bits lidos
   int estado_recebido = bit0 + (bit1 * 2);
-
-  int LDRinput = analogRead(LDRPin);
-  
-//  Serial.println("Leitura do LDR:");
-//  Serial.println(LDRinput);
-    float humidade = dht.readHumidity();
-    float tempC = dht.readTemperature();
-    Serial.println("Leitura de humidade");
-    Serial.println(humidade);
   
   // PARTE 2: Executar a ação do LED correspondente ao estado recebido
   switch (estado_recebido) {
@@ -192,5 +211,11 @@ void loop() {
     case 3:
       charging();
       break;
+  }
+
+  if(estado_recebido != estado_anterior){
+    sendDistance();
+    sendHumidity();
+    sendLight();
   }
 }
