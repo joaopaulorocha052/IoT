@@ -18,7 +18,7 @@ BluetoothSerial SerialBT;
 #define TELEMETRY_PERIOD_MS 100UL
 
 // Nome Bluetooth do Master ao qual vamos conectar
-const char* MASTER_BT_NAME = "HUB_MASTER";
+uint8_t adrress[6] {0xe0, 0x5a, 0x1b, 0x5f, 0xed, 0xe8};
 
 bool i2cReadFloat(char cmd, float &outValue) {
   // Diz ao Mega qual grandeza queremos
@@ -60,7 +60,7 @@ void setup() {
   Serial.print(MASTER_BT_NAME);
   Serial.println(F(")..."));
 
-  bool connected = SerialBT.connect(MASTER_BT_NAME);
+  bool connected = SerialBT.connect(address);
   if (!connected) {
     Serial.println(F("Falha inicial ao conectar. Tentando reconectar em loop..."));
   } else {
