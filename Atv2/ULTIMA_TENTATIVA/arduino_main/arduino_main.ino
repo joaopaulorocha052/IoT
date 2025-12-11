@@ -35,7 +35,11 @@ void onI2CReceive(int numBytes) {
 // Envia o float correspondente ao comando atual
 void onI2CRequest() {
   float value = NAN;
-  switch (currentCmd) {
+  noInterrupts();
+  char cmd = currentCmd;
+  interrupts();
+  
+  switch (cmd) {
     case 'a': value = lastTemp; break;
     case 'b': value = lastHum;  break;
     case 'c': value = lastDist; break;
@@ -53,7 +57,7 @@ float measureDistanceCm() {
   delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
 
-  unsigned long duration = pulseIn(ECHO_PIN, HIGH, 30000UL); // timeout 30 ms
+  unsigned long duration = pulseIn(ECHO_PIN, HIGH, 50000UL); // timeout 50 ms
   if (duration == 0) {
     return NAN;
   }
@@ -63,25 +67,36 @@ float measureDistanceCm() {
 }
 
 void setup() {
+  Serial.begin(115200);          // Inicializa Serial primeiro
+  delay(2000);                   // Aguarda estabilização
+  
+  Serial.println(F("\n================================="));
+  Serial.println(F("Arduino - Hub de Sensores I2C"));
+  Serial.println(F("================================="));
+  
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
+  Serial.println(F("[OK] Pinos HC-SR04 configurados"));
 
   dht.begin();
+  Serial.println(F("[OK] Sensor DHT11 inicializado"));
 
   Wire.begin(I2C_ADDR);          // Mega como I2C Slave
   Wire.onReceive(onI2CReceive);
   Wire.onRequest(onI2CRequest);
-
-  Serial.begin(115200);          // (opcional, para debug local)
-  Serial.println(F("Mega - Hub de sensores (T/U/D) pronto."));
+  
+  Serial.print(F("[OK] I2C Slave inicializado no endereco 0x"));
+  Serial.println(I2C_ADDR, HEX);
+  Serial.println(F("\nAguardando requisicoes I2C do Master..."));
+  Serial.println(F("=================================\n"));
 }
 
 void loop() {
   static unsigned long lastUpdateMs = 0;
   unsigned long now = millis();
 
-  // Atualiza sensores periodicamente (ex: a cada 1000 ms)
-  if (now - lastUpdateMs >= 1000UL) {
+  // Atualiza sensores periodicamente (ex: a cada 500 ms)
+  if (now - lastUpdateMs >= 500UL) {
     lastUpdateMs = now;
 
     float t = dht.readTemperature();
