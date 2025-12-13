@@ -3,7 +3,7 @@
 #include <Wire.h>
 #include <DHT.h>
 
-#define I2C_ADDR 0x08  // Endereço I2C do Mega
+#define I2C_ADDR 0x08  // Endereço I2C do Mega (evitar 1-7, são reservados)
 
 // --- Pinos dos sensores ---
 #define DHTPIN   2
@@ -21,6 +21,7 @@ float lastDist = NAN;    // cm
 
 // Comando atual solicitado pelo mestre ('a', 'b', 'c')
 volatile char currentCmd = 'a';
+volatile bool cmdReceived = false;
 
 // Atualiza apenas qual sensor o mestre quer ler
 void onI2CReceive(int numBytes) {
@@ -28,6 +29,7 @@ void onI2CReceive(int numBytes) {
     char c = (char)Wire.read();
     if (c == 'a' || c == 'b' || c == 'c') {
       currentCmd = c;
+      cmdReceived = true;
     }
   }
 }
@@ -35,9 +37,7 @@ void onI2CReceive(int numBytes) {
 // Envia o float correspondente ao comando atual
 void onI2CRequest() {
   float value = NAN;
-  noInterrupts();
   char cmd = currentCmd;
-  interrupts();
   
   switch (cmd) {
     case 'a': value = lastTemp; break;
@@ -45,7 +45,11 @@ void onI2CRequest() {
     case 'c': value = lastDist; break;
     default:  value = NAN;      break;
   }
-  Wire.write((uint8_t*)&value, sizeof(float));
+  
+  // Envia os 4 bytes do float
+  uint8_t buf[4];
+  memcpy(buf, &value, sizeof(float));
+  Wire.write(buf, 4);
 }
 
 // Mede a distância em cm com o HC-SR04
@@ -107,13 +111,21 @@ void loop() {
     lastHum  = h;
     lastDist = d;
 
-    // Debug opcional
+    // Debug - mostra leituras e comandos I2C recebidos
     Serial.print(F("T="));
     Serial.print(lastTemp);
     Serial.print(F("  U="));
     Serial.print(lastHum);
     Serial.print(F("  D="));
-    Serial.println(lastDist);
+    Serial.print(lastDist);
+    
+    if (cmdReceived) {
+      Serial.print(F("  [I2C cmd='"));
+      Serial.print(currentCmd);
+      Serial.print(F("']"));
+      cmdReceived = false;
+    }
+    Serial.println();
   }
 
   // Nada mais aqui; leituras I2C são disparadas pelo mestre (ESP32)

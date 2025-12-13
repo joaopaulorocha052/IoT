@@ -1,40 +1,43 @@
-// esp32_slave_hub.cpp
-
 #include <Arduino.h>
 #include <Wire.h>
 #include "BluetoothSerial.h"
 
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
-#error Bluetooth não está habilitado no menuconfig do ESP32!
+#error Bluetooth nao esta habilitado no menuconfig do ESP32!
 #endif
 
 BluetoothSerial SerialBT;
 
-#define I2C_ADDR    0x08
+#define I2C_ADDR    0x09   // Endereco do Arduino local (diferente do Master!)
 #define SDA_PIN     21
 #define SCL_PIN     22
+#define I2C_FREQ    100000 // 100kHz (mais estavel)
 
-// Período de envio em ms (atividade pede 100 ms)
-#define TELEMETRY_PERIOD_MS 100UL
+// Periodo de envio em ms
+#define TELEMETRY_PERIOD_MS 2000UL  // 2 segundos
 
-// Nome Bluetooth do Master ao qual vamos conectar
-uint8_t adrress[6] {0xe0, 0x5a, 0x1b, 0x5f, 0xed, 0xe8};
+// Nome Bluetooth do Master
+String masterName = "HUB_MASTER";
+bool isConnected = false;
 
 bool i2cReadFloat(char cmd, float &outValue) {
-  // Diz ao Mega qual grandeza queremos
   Wire.beginTransmission(I2C_ADDR);
   Wire.write((uint8_t)cmd);
-  if (Wire.endTransmission() != 0) {
+  byte error = Wire.endTransmission();
+  
+  if (error != 0) {
+    Serial.printf("[I2C] endTransmission erro: %d\n", error);
     return false;
   }
 
-  // Pequeno delay para o Mega atualizar a seleção (não é leitura pesada)
-  delay(5);
+  delay(10);  // Tempo para o Arduino processar
 
   const uint8_t numBytes = 4;
   uint8_t buf[numBytes];
-  int received = Wire.requestFrom(I2C_ADDR, (int)numBytes);
+  int received = Wire.requestFrom((uint8_t)I2C_ADDR, numBytes);
+  
   if (received != numBytes) {
+    Serial.printf("[I2C] requestFrom recebeu %d bytes (esperado %d)\n", received, numBytes);
     return false;
   }
 
@@ -45,43 +48,97 @@ bool i2cReadFloat(char cmd, float &outValue) {
   return true;
 }
 
+// Scanner I2C
+void scanI2C() {
+  Serial.println(F("\n=== Scanner I2C ==="));
+  byte devicesFound = 0;
+  for (byte address = 8; address < 127; address++) {
+    Wire.beginTransmission(address);
+    byte error = Wire.endTransmission();
+    if (error == 0) {
+      Serial.print(F("[ENCONTRADO] 0x"));
+      if (address < 16) Serial.print("0");
+      Serial.println(address, HEX);
+      devicesFound++;
+    }
+  }
+  if (devicesFound == 0) {
+    Serial.println(F("[ERRO] Nenhum dispositivo I2C!"));
+  }
+  Serial.println(F("===================\n"));
+}
+
 void setup() {
   Serial.begin(115200);
-  delay(2000);
+  delay(1000);
 
-  Serial.println(F("ESP32 Slave - Hub de Sensores"));
-  Serial.println(F("Iniciando I2C..."));
-  Wire.begin(SDA_PIN, SCL_PIN, 400000);
+  Serial.println(F("\n========================================"));
+  Serial.println(F("ESP32 SLAVE - Dispositivo-Padrao 2"));
+  Serial.println(F("========================================"));
+  
+  // Inicializa I2C
+  Serial.println(F("[I2C] Iniciando..."));
+  Wire.begin(SDA_PIN, SCL_PIN, I2C_FREQ);
+  delay(100);
+  
+  scanI2C();
 
-  Serial.println(F("Iniciando Bluetooth em modo cliente..."));
-  SerialBT.begin("HUB_SLAVE", true); // nome local, modo cliente
-
-  Serial.print(F("Conectando ao Master ("));
-  Serial.print(MASTER_BT_NAME);
-  Serial.println(F(")..."));
-
-  bool connected = SerialBT.connect(address);
-  if (!connected) {
-    Serial.println(F("Falha inicial ao conectar. Tentando reconectar em loop..."));
+  // Testa conexao com Arduino local
+  Wire.beginTransmission(I2C_ADDR);
+  if (Wire.endTransmission() != 0) {
+    Serial.println(F("[I2C] ERRO - Arduino nao encontrado!"));
   } else {
-    Serial.println(F("Conectado ao Master!"));
+    Serial.println(F("[I2C] OK - Arduino conectado (0x09)"));
   }
+
+  // Inicializa Bluetooth como CLIENTE (Slave)
+  Serial.println(F("\n[BT] Iniciando Bluetooth..."));
+  if (!SerialBT.begin("HUB_SLAVE", true)) {  // true = modo cliente
+    Serial.println(F("[BT] ERRO ao iniciar Bluetooth!"));
+    while(1) delay(1000);
+  }
+  
+  Serial.println(F("[BT] OK - Nome: HUB_SLAVE"));
+  Serial.print(F("[BT] Conectando ao Master: "));
+  Serial.println(masterName);
+  
+  Serial.println(F("\n========================================\n"));
 }
 
 void loop() {
-  // Garante que haja conexão Bluetooth
+  // 1) Verifica conexao Bluetooth
   if (!SerialBT.connected()) {
+    if (isConnected) {
+      Serial.println(F("[BT] Desconectado do Master!"));
+      isConnected = false;
+    }
+    
     static unsigned long lastRetry = 0;
     unsigned long now = millis();
-    if (now - lastRetry > 2000UL) {
+    
+    if (now - lastRetry > 5000UL) {
       lastRetry = now;
-      Serial.println(F("Tentando reconectar ao Master..."));
-      SerialBT.connect(MASTER_BT_NAME);
+      Serial.println(F("[BT] Tentando conectar ao Master..."));
+      
+      if (SerialBT.connect(masterName)) {
+        Serial.println(F("[BT] Conectado ao Master!"));
+        isConnected = true;
+      } else {
+        Serial.println(F("[BT] Falha na conexao. Tentando novamente em 5s..."));
+      }
     }
+    
     delay(100);
     return;
   }
 
+  // Se acabou de conectar
+  if (!isConnected) {
+    Serial.println(F("[BT] Conexao estabelecida!"));
+    isConnected = true;
+  }
+
+  // 2) Envio periodico de dados para o Master
   static unsigned long lastSend = 0;
   unsigned long now = millis();
 
@@ -90,21 +147,25 @@ void loop() {
 
     float t, u, d;
     bool okT = i2cReadFloat('a', t);
+    delay(20);
     bool okU = i2cReadFloat('b', u);
+    delay(20);
     bool okD = i2cReadFloat('c', d);
 
     if (okT && okU && okD) {
       char msg[80];
-      // Sempre 3 casas decimais
       snprintf(msg, sizeof(msg), "T=%.3f;U=%.3f;D=%.3f\n", t, u, d);
 
-      SerialBT.print(msg);   // envia ao Master
-      Serial.print(F("Enviado ao Master: "));
-      Serial.print(msg);     // debug serial local
+      SerialBT.print(msg);
+      Serial.print(F("[BT] Enviado: "));
+      Serial.print(msg);
     } else {
-      Serial.println(F("Falha ao ler sensores via I2C (Slave)."));
+      Serial.println(F("[I2C] Falha ao ler sensores!"));
+      if (!okT) Serial.println(F("  - Temperatura falhou"));
+      if (!okU) Serial.println(F("  - Umidade falhou"));
+      if (!okD) Serial.println(F("  - Distancia falhou"));
     }
   }
 
-  // Nada impede de processar alguma coisa de retorno via Bluetooth, se quiser
+  delay(10);
 }
