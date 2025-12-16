@@ -18,6 +18,7 @@ BluetoothSerial SerialBT;
 
 // Nome Bluetooth do Master
 String masterName = "HUB_MASTER";
+uint8_t address[6] {0xE0, 0x5A, 0x1B, 0x77, 0x4B, 0x2A};
 bool isConnected = false;
 
 bool i2cReadFloat(char cmd, float &outValue) {
@@ -120,7 +121,7 @@ void loop() {
       lastRetry = now;
       Serial.println(F("[BT] Tentando conectar ao Master..."));
       
-      if (SerialBT.connect(masterName)) {
+      if (SerialBT.connect(address)) {
         Serial.println(F("[BT] Conectado ao Master!"));
         isConnected = true;
       } else {
