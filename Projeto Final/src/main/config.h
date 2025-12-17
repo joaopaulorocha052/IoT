@@ -13,8 +13,8 @@
 // ============================================================================
 // CONFIGURAÇÕES DE REDE WIFI
 // ============================================================================
-#define WIFI_SSID           "SEU_SSID"
-#define WIFI_PASSWORD       "SUA_SENHA"
+#define WIFI_SSID           "Fernando WiFi"
+#define WIFI_PASSWORD       "abracadabra2"
 #define WIFI_TIMEOUT_MS     10000       // Tempo máximo para conectar (ms)
 #define WIFI_RETRY_DELAY_MS 5000        // Intervalo entre tentativas de reconexão
 
@@ -23,23 +23,23 @@
 // ============================================================================
 #define MQTT_BROKER         "mqtt.flespi.io"
 #define MQTT_PORT           1883
-#define MQTT_TOKEN          "SEU_TOKEN_FLESPI"  // Token vai no campo username
+#define MQTT_TOKEN          "2M3aWYXKgNvgCUlsycMgM5emxKcsWoOSnpj8fBm3vMIzVwBsVilDQ5lEWjKzRDxw"  // Token vai no campo username
 #define MQTT_PASSWORD       ""                   // Flespi não usa password
-#define MQTT_CLIENT_ID      "esp32_carrinho"
+#define MQTT_CLIENT_ID      "esp32_joaopaulo"
 
 // ============================================================================
 // TÓPICOS MQTT - TELEMETRIA (ESP32 -> Flespi)
 // ============================================================================
-#define TOPIC_TELEMETRIA_DISTANCIA   "carrinho/telemetria/distancia"
-#define TOPIC_TELEMETRIA_VELOCIDADE  "carrinho/telemetria/velocidade"
-#define TOPIC_TELEMETRIA_INCLINACAO  "carrinho/telemetria/inclinacao"
-#define TOPIC_TELEMETRIA_STATUS      "carrinho/telemetria/status"
+#define TOPIC_TELEMETRIA_DISTANCIA   "/projeto-final/adas/telemetria/distancia"
+#define TOPIC_TELEMETRIA_VELOCIDADE  "/projeto-final/adas/telemetria/velocidade"
+#define TOPIC_TELEMETRIA_INCLINACAO  "/projeto-final/adas/telemetria/inclinacao"
+#define TOPIC_TELEMETRIA_STATUS      "/projeto-final/adas/telemetria/status"
 
 // ============================================================================
 // TÓPICOS MQTT - COMANDOS (Flespi -> ESP32)
 // ============================================================================
-#define TOPIC_COMANDO_SETPOINT       "carrinho/comando/setpoint"
-#define TOPIC_COMANDO_CONTROLE       "carrinho/comando/controle"
+#define TOPIC_COMANDO_SETPOINT       "/projeto-final/adas/conf/distancia"
+#define TOPIC_COMANDO_CONTROLE       "/projeto-final/adas/conf/estado"
 
 // ============================================================================
 // PINOS ESP32 - SENSOR ULTRASSÔNICO HC-SR04
