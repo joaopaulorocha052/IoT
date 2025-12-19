@@ -1,16 +1,7 @@
-/*
- * ============================================================================
- * IMPLEMENTAÇÃO DO MÓDULO DE CONTROLE DE MOTORES
- * ============================================================================
- */
-
 #include "motor_control.h"
 #include "config.h"
 
-// ============================================================================
 // IMPLEMENTAÇÃO - CONTROLADOR DE MOTORES
-// ============================================================================
-
 ControladorMotores::ControladorMotores(int pinIN1, int pinIN2, int pinENA,
                                        int pinIN3, int pinIN4, int pinENB,
                                        int canalA, int canalB) {
@@ -181,10 +172,7 @@ DirecaoMotor ControladorMotores::getDirecaoAtual() {
     return _direcaoAtual;
 }
 
-// ============================================================================
 // IMPLEMENTAÇÃO - CONTROLADOR PID
-// ============================================================================
-
 ControladorPID::ControladorPID(float Kp, float Ki, float Kd) {
     _dados.Kp = Kp;
     _dados.Ki = Ki;
@@ -274,10 +262,7 @@ float ControladorPID::getKp() { return _dados.Kp; }
 float ControladorPID::getKi() { return _dados.Ki; }
 float ControladorPID::getKd() { return _dados.Kd; }
 
-// ============================================================================
 // IMPLEMENTAÇÃO - SISTEMA DE CONTROLE DE DISTÂNCIA
-// ============================================================================
-
 SistemaControleDistancia::SistemaControleDistancia(ControladorMotores* motores, 
                                                     ControladorPID* pid) {
     _motores = motores;

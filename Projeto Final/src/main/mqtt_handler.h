@@ -1,11 +1,3 @@
-/*
- * ============================================================================
- * MÓDULO DE COMUNICAÇÃO MQTT
- * ============================================================================
- * Gerencia a conexão WiFi e comunicação MQTT com o broker Flespi.
- * ============================================================================
- */
-
 #ifndef MQTT_HANDLER_H
 #define MQTT_HANDLER_H
 
@@ -13,10 +5,7 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 
-// ============================================================================
 // ENUMERAÇÕES
-// ============================================================================
-
 enum EstadoConexao {
     DESCONECTADO,
     CONECTANDO_WIFI,
@@ -26,18 +15,12 @@ enum EstadoConexao {
     ERRO_CONEXAO
 };
 
-// ============================================================================
 // CALLBACK PARA COMANDOS RECEBIDOS
-// ============================================================================
-
 // Tipos de callback para processar mensagens recebidas
 typedef void (*CallbackSetpoint)(float novoSetpoint);
 typedef void (*CallbackControle)(bool ativar);
 
-// ============================================================================
 // CLASSE DO GERENCIADOR MQTT
-// ============================================================================
-
 class GerenciadorMQTT {
 public:
     GerenciadorMQTT();
@@ -62,6 +45,11 @@ public:
     bool publicarVelocidade(int velocidade);
     bool publicarInclinacao(String jsonInclinacao);
     bool publicarStatus(String status);
+    bool publicarBateria(int nivelBateria);
+    bool publicarDentro(String status);
+    bool publicarFora(String status);
+    bool publicarAceleracao(String status);
+    bool publicarTouch(String status);
     
     // Registro de callbacks para comandos recebidos
     void setCallbackSetpoint(CallbackSetpoint callback);

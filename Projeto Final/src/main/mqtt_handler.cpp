@@ -1,19 +1,10 @@
-/*
- * ============================================================================
- * IMPLEMENTAÇÃO DO MÓDULO DE COMUNICAÇÃO MQTT
- * ============================================================================
- */
-
 #include "mqtt_handler.h"
 #include "config.h"
 
 // Instância estática para uso no callback
 GerenciadorMQTT* GerenciadorMQTT::_instancia = nullptr;
 
-// ============================================================================
 // IMPLEMENTAÇÃO
-// ============================================================================
-
 GerenciadorMQTT::GerenciadorMQTT() : _mqttClient(_wifiClient) {
     _estado = DESCONECTADO;
     _ultimaTentativaReconexao = 0;
@@ -167,10 +158,7 @@ void GerenciadorMQTT::subscribeTopicos() {
     }
 }
 
-// ============================================================================
 // PUBLICAÇÃO DE TELEMETRIA
-// ============================================================================
-
 bool GerenciadorMQTT::publicarDistancia(float distancia) {
     if (!isConectado()) return false;
     
@@ -201,10 +189,40 @@ bool GerenciadorMQTT::publicarStatus(String status) {
     return _mqttClient.publish(TOPIC_TELEMETRIA_STATUS, status.c_str());
 }
 
-// ============================================================================
-// CALLBACKS
-// ============================================================================
+bool GerenciadorMQTT::publicarBateria(int nivelBateria) {
+    if (!isConectado()) return false;
+    
+    char payload[16];
+    snprintf(payload, sizeof(payload), "%d", nivelBateria);
+    
+    return _mqttClient.publish(TOPIC_TELEMETRIA_BATERIA, payload);
+}
 
+bool GerenciadorMQTT::publicarDentro(String status) {
+    if (!_mqttClient.connected()) return false;
+    
+    return _mqttClient.publish(TOPIC_TELEMETRIA_THRESHOLD_DENTRO, status.c_str());
+}
+
+bool GerenciadorMQTT::publicarFora(String status) {
+    if (!_mqttClient.connected()) return false;
+    
+    return _mqttClient.publish(TOPIC_TELEMETRIA_THRESHOLD_FORA, status.c_str());
+}
+
+bool GerenciadorMQTT::publicarAceleracao(String status) {
+    if (!_mqttClient.connected()) return false;
+    
+    return _mqttClient.publish(TOPIC_TELEMETRIA_ACCEL, status.c_str());
+}
+
+bool GerenciadorMQTT::publicarTouch(String status) {
+    if (!_mqttClient.connected()) return false;
+    
+    return _mqttClient.publish(TOPIC_TELEMETRIA_TOUCH, status.c_str());
+}
+
+// CALLBACKS
 void GerenciadorMQTT::setCallbackSetpoint(CallbackSetpoint callback) {
     _callbackSetpoint = callback;
 }
