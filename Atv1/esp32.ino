@@ -1,28 +1,10 @@
-// =================================================================
-// == CÓDIGO PARA O SUBSISTEMA PRINCIPAL (ESP8266 / NodeMCU)      ==
-// =================================================================
+#include "esp32.h"
 
-// Pinos para comunicar o estado para o Arduino (2 bits)
-const int pino_estado_bit0 = D5; // Envia o bit 0 do estado
-const int pino_estado_bit1 = D6; // Envia o bit 1 do estado
-const int pino_led_bateria = D25; // Saida pra o indicador da bateria
-
-// Tempos para transições de estado automáticas (em milissegundos)
-const unsigned long cleaning_para_docking_delay = 2000;
-const unsigned long docking_para_charging_delay = 2000;
-const unsigned long charging_para_idle_delay = 2000;
-const unsigned long intervalo_fade_bateria = 10;
-
-// Variáveis de estado
-int estado_maquina = 0; // 0: Idle, 1: Cleaning, 2: Docking, 3: Charging
-
-// Variável para controle de tempo das transições de estado
-unsigned long tempoEntradaEstado = 0;
-unsigned long ultimoFadeOut = 0;
-unsigned long ultimoFadeIn = 0;
-
-int dacNivelFadeOut = 255;
-int dacNivelFadeIn = 0;
+int aplicarNivelBateria(int valor) {
+  valor = constrain(valor, 0, 255);
+  dacWrite(pino_led_bateria, valor);
+  return valor;
+}
 
 // Nova função para enviar o estado atual via GPIOs
 void enviarEstado(int estado) {
@@ -34,11 +16,70 @@ void enviarEstado(int estado) {
   digitalWrite(pino_estado_bit1, bit1);
 }
 
+/* Talvez seja preciso modificar o default desses inputs*/
+void receiveDistance(){
+  int distance_bit1 = digitalRead(pino_distancia_bit1);
+  int distance_bit2 = digitalRead(pino_distancia_bit2);
+
+  if(distance_bit1 == 1 && distance_bit2 == 1){
+    Serial.println("Distância: Muito Perto");
+  } else if(distance_bit1 == 0 && distance_bit2 == 1){
+    Serial.println("Distância: Médio");
+  } else if(distance_bit1 == 1 && distance_bit2 == 0){
+    Serial.println("Distância: Longe");
+  } else {
+    Serial.println("Distância: Sem Obstrução");
+  }
+}
+
+void receiveHumidity(){
+  int humidity_bit = digitalRead(pino_humidity_bit);
+
+  if(humidity_bit == 1){
+    Serial.println("Humidade: Alta");
+  } else {
+    Serial.println("Humidade: Normal");
+  }
+}
+
+void receiveLuminosity(){
+  int light_bit = digitalRead(pino_luminosity_bit);
+
+  if(light_bit == 1){
+    Serial.println("Luminosidade: Alta");
+  } else {
+    Serial.println("Luminosidade: Baixa");
+  }
+}
+
+void receiveData(){
+
+  if ((millis() - tempo_leitura >= 1000)) {
+    tempo_leitura = millis();
+    receiveDistance();
+    receiveHumidity();
+    receiveLuminosity();
+  }
+
+}
+
 void setup() {
   Serial.begin(115200);
 
   pinMode(pino_estado_bit0, OUTPUT);
   pinMode(pino_estado_bit1, OUTPUT);
+  pinMode(pino_led_bateria, OUTPUT);
+  pinMode(pino_luminosity_bit, INPUT);
+  pinMode(pino_humidity_bit, INPUT);
+  pinMode(pino_distancia_bit1, INPUT);
+  pinMode(pino_distancia_bit2, INPUT);
+
+  tempoEntradaEstado = millis();
+  ultimoFadeOut = tempoEntradaEstado;
+  ultimoFadeIn = tempoEntradaEstado;
+  dacNivelFadeOut = aplicarNivelBateria(255);
+  dacNivelFadeIn = 0;
+  enviarEstado(estado_maquina);
 
   Serial.println("Subsistema Principal Iniciado.");
   Serial.println("Envie 'a' para iniciar a limpeza.");
@@ -53,12 +94,16 @@ void loop() {
     input_serial = Serial.read();
   }
 
+  receiveData();
+
   switch (estado_maquina) {
     case 0: // Transições a partir de Idle
-      dacWrite(pino_led_bateria, 255);
+      dacNivelFadeOut = aplicarNivelBateria(255);
+      dacNivelFadeIn = 0;
       if (input_serial == 'a') {
         estado_maquina = 1;
         tempoEntradaEstado = millis();
+        dacNivelFadeOut = 255;
         Serial.println("Estado: Cleaning");
       }
       break;
@@ -66,23 +111,25 @@ void loop() {
     case 1: // Transições a partir de Cleaning
       
       if(millis() - ultimoFadeOut >= intervalo_fade_bateria) {
-        dacNivelFadeOut = dacNivelFadeOut - 10;
-        dacWrite(pino_led_bateria, dacNivelFadeOut);
         ultimoFadeOut = millis();
+        dacNivelFadeOut = aplicarNivelBateria(dacNivelFadeOut - fade_step);
       }
       if ((millis() - tempoEntradaEstado >= cleaning_para_docking_delay) || (input_serial == 'b')) {
         estado_maquina = 2;
         tempoEntradaEstado = millis();
         Serial.println("Estado: Docking");
         dacNivelFadeOut = 255;
+        aplicarNivelBateria(0);
       }
       break;
 
     case 2: // Transições a partir de Docking
-      dacWrite(pino_led_bateria, 0);
+      aplicarNivelBateria(0);
       if (millis() - tempoEntradaEstado >= docking_para_charging_delay) {
         estado_maquina = 3;
         tempoEntradaEstado = millis();
+        ultimoFadeIn = tempoEntradaEstado;
+        dacNivelFadeIn = 0;
         Serial.println("Estado: Charging");
       }
       break;
@@ -90,14 +137,14 @@ void loop() {
     case 3: // Transições a partir de Charging
       // O diagrama mais recente indica que 'a' vai para Cleaning
       if(millis() - ultimoFadeIn >= intervalo_fade_bateria) {
-        dacNivelFadeIn = dacNivelFadeIn + 10;
-        dacWrite(pino_led_bateria, dacNivelFadeIn);
         ultimoFadeIn = millis();
+        dacNivelFadeIn = aplicarNivelBateria(dacNivelFadeIn + fade_step);
       }
       if (input_serial == 'a') {
         estado_maquina = 1;
         tempoEntradaEstado = millis();
         dacNivelFadeIn = 0;
+        dacNivelFadeOut = 255;
         Serial.println("Estado: Cleaning (comando manual 'a' recebido)");
       } else if (millis() - tempoEntradaEstado >= charging_para_idle_delay) {
         estado_maquina = 0; // Timeout leva para Idle
